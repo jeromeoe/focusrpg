@@ -6,6 +6,7 @@ import { useTimerStore, usePlayerStore } from "@/lib/stores/game-store";
 import { GAME, DAILY_HABITS } from "@/lib/constants";
 import { rollSessionRewards } from "@/lib/game-logic";
 import { DailyRecapModal } from "@/components/daily-recap-modal";
+import { StarterSelectionModal } from "@/components/starter-selection-modal";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -22,7 +23,10 @@ import {
   Loader2,
   Flame,
   Gift,
+  Heart,
 } from "lucide-react";
+
+import { UserPokemon } from "@/lib/types";
 
 const PRESETS = GAME.TIMER_PRESETS;
 
@@ -65,10 +69,14 @@ export default function FocusPage() {
   const [showRecap, setShowRecap] = useState(false);
   const [recapDate, setRecapDate] = useState<Date | null>(null);
 
-  // Fetch Stats & Habits on load
+  // Pokemon Buddy State
+  const [buddy, setBuddy] = useState<UserPokemon | null>(null);
+  const [showStarterModal, setShowStarterModal] = useState(false);
+
+  // Fetch Stats, Habits & Buddy on load
   useEffect(() => {
     async function fetchData() {
-      // 1. Fetch Profile (XP, Coins, etc.)
+      // 1. Fetch Profile
       try {
         const pRes = await fetch("/api/profile");
         if (pRes.ok) {
@@ -79,7 +87,23 @@ export default function FocusPage() {
         console.error("Failed to fetch profile", e);
       }
 
-      // 2. Fetch Habits
+      // 2. Fetch Buddy
+      try {
+        const bRes = await fetch("/api/pokemon");
+        if (bRes.ok) {
+          const bData = await bRes.json();
+          if (bData) {
+            setBuddy(bData);
+          } else {
+            // If authenticated but no buddy, show selection
+            if (session?.user) setShowStarterModal(true);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to fetch buddy", e);
+      }
+
+      // 3. Fetch Habits
       try {
         const res = await fetch("/api/habits");
         if (!res.ok) throw new Error("Failed to fetch habits");
@@ -97,8 +121,26 @@ export default function FocusPage() {
         setHabitsLoading(false);
       }
     }
-    fetchData();
-  }, [setProfile]);
+    if (session?.user) fetchData();
+  }, [session, setProfile]);
+
+  const handleAdopt = async (speciesId: number, nickname: string) => {
+    try {
+      const res = await fetch("/api/pokemon/adopt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ speciesId, nickname })
+      });
+      if (res.ok) {
+        const newBuddy = await res.json();
+        setBuddy(newBuddy);
+        setShowStarterModal(false);
+        toast.success(`Welcome home, ${nickname}!`);
+      }
+    } catch {
+      toast.error("Adoption failed");
+    }
+  };
 
   // Check for Daily Recap (Missed Yesterday?)
   useEffect(() => {
@@ -194,33 +236,40 @@ export default function FocusPage() {
 
       async function persistRewards() {
         try {
-          const getRes = await fetch("/api/profile");
-          if (!getRes.ok) return;
-          const currentProfile = await getRes.json();
-
-          const newXp = currentProfile.xp + earnedXp;
-          const newCoins = currentProfile.coins + earnedCoins;
-          const newLevel = Math.floor(newXp / 100) + 1;
-          const newFocusTime = currentProfile.total_focus_minutes + minutes;
-
-          await fetch("/api/profile", {
-            method: "PATCH",
+          // Use new rewards endpoint to handle Profile + Buddy XP/Coins
+          const res = await fetch("/api/rewards", {
+            method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              xp: newXp,
-              coins: newCoins,
-              level: newLevel,
-              total_focus_minutes: newFocusTime,
+              xp: earnedXp,
+              coins: earnedCoins,
+              source: "timer"
             }),
           });
 
-          setProfile({
-            ...currentProfile,
-            xp: newXp,
-            coins: newCoins,
-            level: newLevel,
-            total_focus_minutes: newFocusTime
-          });
+          if (!res.ok) throw new Error("Failed to reward");
+
+          const data = await res.json();
+
+          // 1. Update Buddy Local State
+          if (data.buddy) {
+            setBuddy(data.buddy);
+          }
+
+          // 2. Fetch latest Profile to sync (avoid stale closure issues)
+          const pRes = await fetch("/api/profile");
+          if (pRes.ok) {
+            const pData = await pRes.json();
+            setProfile(pData);
+          }
+
+          // 3. Notify Level Up
+          if (data.leveledUp && data.buddy) {
+            toast.success("LEVEL UP!", {
+              description: `${data.buddy.nickname} grew to Level ${data.buddy.level}!`,
+              icon: <Flame className="w-5 h-5 text-accent-red" />
+            });
+          }
 
         } catch (err) {
           console.error("Failed to persist rewards", err);
@@ -303,14 +352,49 @@ export default function FocusPage() {
 
   return (
     <div className="flex flex-col gap-6 max-w-2xl mx-auto pb-20">
-      {/* Header */}
+      {/* Header / Buddy Card */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-accent-gold to-orange-500 bg-clip-text text-transparent">
-            FocusRPG
-          </h1>
-          <p className="text-muted-foreground">Level {profile?.level ?? 1} • {profile?.class_name ?? "Novice"}</p>
-        </div>
+        {buddy ? (
+          <div className="flex items-center gap-4 group cursor-pointer hover:bg-surface-200/50 p-2 rounded-xl transition-all" onClick={() => toast.info("Buddy stats specific view coming soon!")}>
+            <div className="relative">
+              <img
+                src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/showdown/${buddy.species_id}.gif`}
+                alt={buddy.nickname}
+                className="w-16 h-16 object-contain pixelated drop-shadow-lg"
+              />
+              <div className="absolute -bottom-1 -right-1 bg-surface-300 text-[10px] px-1 rounded-full border border-surface-400 font-bold shadow-sm">
+                Lvl {buddy.level}
+              </div>
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-accent-gold to-orange-500 bg-clip-text text-transparent">
+                FocusRPG
+              </h1>
+              <div className="flex items-center gap-3 text-sm font-medium mt-1">
+                <span className="text-foreground">{buddy.nickname}</span>
+                <div className="flex items-center gap-1 text-accent-red bg-accent-red/10 px-1.5 py-0.5 rounded-full">
+                  <Heart className="w-3 h-3 fill-current" />
+                  <span className="text-xs font-bold">{buddy.happiness}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div>
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-accent-gold to-orange-500 bg-clip-text text-transparent">
+              FocusRPG
+            </h1>
+            <p className="text-muted-foreground text-sm flex items-center gap-2">
+              Level {profile?.level ?? 1} • {profile?.class_name ?? "Novice"}
+              {session?.user && !buddy && (
+                <Button size="sm" variant="ghost" className="h-6 px-2 text-xs text-accent-blue" onClick={() => setShowStarterModal(true)}>
+                  Adopt Buddy
+                </Button>
+              )}
+            </p>
+          </div>
+        )}
+
         <div className="flex items-center gap-4">
           <div className="bg-surface-200 px-3 py-1 rounded-full flex items-center gap-2">
             <Coins className="w-4 h-4 text-accent-gold" />
@@ -463,6 +547,11 @@ export default function FocusPage() {
           checkDate={recapDate}
         />
       )}
+
+      <StarterSelectionModal
+        isOpen={showStarterModal}
+        onSelect={handleAdopt}
+      />
     </div>
   );
 }

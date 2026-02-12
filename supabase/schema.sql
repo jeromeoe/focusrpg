@@ -1,12 +1,9 @@
 -- =============================================
 -- FocusRPG Updated Schema (No Monsters)
--- Run this AFTER dropping old tables if they exist
 -- =============================================
 
--- Drop old monster-related objects
-DROP TABLE IF EXISTS monsters CASCADE;
-ALTER TABLE IF EXISTS profiles DROP COLUMN IF EXISTS active_monster_id;
-ALTER TABLE IF EXISTS focus_sessions DROP COLUMN IF EXISTS monster_id;
+-- Drop all tables to ensure clean slate
+DROP TABLE IF EXISTS profiles, quests, focus_sessions, inventory, habit_entries, habit_streaks, user_pokemon CASCADE;
 
 -- ===== PROFILES =====
 CREATE TABLE IF NOT EXISTS profiles (
@@ -19,12 +16,11 @@ CREATE TABLE IF NOT EXISTS profiles (
   current_streak INTEGER NOT NULL DEFAULT 0,
   longest_streak INTEGER NOT NULL DEFAULT 0,
   total_focus_minutes INTEGER NOT NULL DEFAULT 0,
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  class_name TEXT -- Added for Pokemon update compatibility
 );
 
 -- ===== QUESTS (Tasks) =====
--- Drop and recreate to add priority + category
-DROP TABLE IF EXISTS quests CASCADE;
 CREATE TABLE quests (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
@@ -43,7 +39,6 @@ CREATE TABLE quests (
 );
 
 -- ===== FOCUS SESSIONS =====
-DROP TABLE IF EXISTS focus_sessions CASCADE;
 CREATE TABLE focus_sessions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
@@ -58,16 +53,6 @@ CREATE TABLE focus_sessions (
   completed_at TIMESTAMPTZ
 );
 
--- ===== INVENTORY =====
-CREATE TABLE IF NOT EXISTS inventory (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-  item_type TEXT NOT NULL CHECK (item_type IN ('reward', 'utility', 'goal')),
-  item_name TEXT NOT NULL,
-  item_metadata JSONB DEFAULT '{}',
-  quantity INTEGER NOT NULL DEFAULT 1,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
 
 -- ===== HABIT ENTRIES =====
 CREATE TABLE IF NOT EXISTS habit_entries (
@@ -96,37 +81,61 @@ CREATE INDEX IF NOT EXISTS idx_quests_user ON quests(user_id);
 CREATE INDEX IF NOT EXISTS idx_quests_status ON quests(user_id, status);
 CREATE INDEX IF NOT EXISTS idx_quests_priority ON quests(user_id, priority);
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON focus_sessions(user_id);
-CREATE INDEX IF NOT EXISTS idx_inventory_user ON inventory(user_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON focus_sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_habit_entries_user ON habit_entries(user_id, date);
 
 -- ===== ROW LEVEL SECURITY =====
--- Permissive for now (single-user private project)
--- Will tighten with auth.uid() once NextAuth is wired
 
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE quests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE focus_sessions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE inventory ENABLE ROW LEVEL SECURITY;
 ALTER TABLE habit_entries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE habit_streaks ENABLE ROW LEVEL SECURITY;
 
--- Drop old policies if they exist
-DROP POLICY IF EXISTS "Users can view own profile" ON profiles;
-DROP POLICY IF EXISTS "Users can update own profile" ON profiles;
-DROP POLICY IF EXISTS "Users can view own quests" ON quests;
-DROP POLICY IF EXISTS "Users can insert own quests" ON quests;
-DROP POLICY IF EXISTS "Users can update own quests" ON quests;
-DROP POLICY IF EXISTS "Users can view own sessions" ON focus_sessions;
-DROP POLICY IF EXISTS "Users can insert own sessions" ON focus_sessions;
-DROP POLICY IF EXISTS "Users can update own sessions" ON focus_sessions;
-DROP POLICY IF EXISTS "Users can view own inventory" ON inventory;
-DROP POLICY IF EXISTS "Users can insert own inventory" ON inventory;
-DROP POLICY IF EXISTS "Users can update own inventory" ON inventory;
+-- Drop old policies if they exist (to allow re-running script)
+DROP POLICY IF EXISTS "Allow all profiles" ON profiles;
+DROP POLICY IF EXISTS "Allow all quests" ON quests;
+DROP POLICY IF EXISTS "Allow all sessions" ON focus_sessions;
+DROP POLICY IF EXISTS "Allow all habits" ON habit_entries;
+DROP POLICY IF EXISTS "Allow all habit streaks" ON habit_streaks;
 
 -- Permissive policies (will lock down with auth later)
 CREATE POLICY "Allow all profiles" ON profiles FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all quests" ON quests FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all sessions" ON focus_sessions FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow all inventory" ON inventory FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all habits" ON habit_entries FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all habit streaks" ON habit_streaks FOR ALL USING (true) WITH CHECK (true);
+
+-- Pokemon Buddy System
+CREATE TABLE IF NOT EXISTS user_pokemon (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+    species_id INT NOT NULL, -- Pokedex ID
+    nickname TEXT,
+    level INT DEFAULT 5,
+    xp INT DEFAULT 0,
+    happiness INT DEFAULT 50, -- 0-100
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Ensure only one active buddy per user (optional, can be enforced by app logic, but partial index is safe)
+-- CREATE UNIQUE INDEX IF NOT EXISTS one_active_buddy_per_user ON user_pokemon (user_id) WHERE (is_active = true);
+
+ALTER TABLE user_pokemon ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow all user_pokemon" ON user_pokemon FOR ALL USING (true) WITH CHECK (true);
+
+-- Inventory System
+CREATE TABLE IF NOT EXISTS inventory (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+    item_id TEXT NOT NULL,
+    quantity INT DEFAULT 1,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(user_id, item_id)
+);
+
+ALTER TABLE inventory ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow all inventory" ON inventory FOR ALL USING (true) WITH CHECK (true);

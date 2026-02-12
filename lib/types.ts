@@ -84,3 +84,12 @@ export interface TimerState {
     sessionCategory: string;
     isBacklog: boolean;
 }
+
+export interface UserPokemon {
+    id: string;
+    species_id: number;
+    nickname: string;
+    level: number;
+    xp: number;
+    happiness: number;
+}

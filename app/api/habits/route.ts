@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { getAuthenticatedUserId, AuthError } from "@/lib/server/auth-utils";
+import { awardRewards } from "@/lib/server/game-service";
 
 // GET /api/habits — Get today's habit entries
 export async function GET() {
@@ -122,6 +123,9 @@ export async function POST(request: NextRequest) {
             .single();
 
         if (streakError) throw streakError;
+
+        // Award Rewards for Habit Completion (Fixed amount for now: 10 XP, 1 coin)
+        await awardRewards(userId, 10, 1);
 
         return NextResponse.json({
             status: "success",

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { getAuthenticatedUserId, AuthError } from "@/lib/server/auth-utils";
+import { awardRewards } from "@/lib/server/game-service";
 
 // PATCH /api/tasks/[id] — Update task status
 export async function PATCH(
@@ -29,11 +30,20 @@ export async function PATCH(
             .update(updates)
             .eq("id", id)
             .eq("user_id", userId) // Ensure ownership
-            .select()
+            .select() // Needed for reward info
             .single();
 
         if (error) {
             return NextResponse.json({ error: error.message }, { status: 500 });
+        }
+
+        // Award Rewards if completed
+        if (body.status === "completed" && data) {
+            const coins = data.reward_coins || 1;
+            const xp = data.reward_xp || 10;
+            // Fire and forget (or await if we want to return updated stats)
+            // We await to return consistent state if needed, though frontend might optimistic update.
+            await awardRewards(userId, xp, coins);
         }
 
         return NextResponse.json(data);

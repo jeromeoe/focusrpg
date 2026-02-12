@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { signOut } from "next-auth/react";
 import { usePlayerStore } from "@/lib/stores/game-store";
-import { Timer, ListTodo, Clock, Gift, User, Flame, Coins, Zap, Calendar } from "lucide-react";
+import { Timer, ListTodo, Clock, Gift, User, Flame, Coins, Zap, Calendar, LogOut } from "lucide-react";
 
 const NAV_ITEMS = [
     { href: "/", label: "Focus", icon: Timer },
@@ -65,8 +66,19 @@ export function Navigation() {
                         <Flame className="w-4 h-4" />
                         <span className="stat-number">{profile?.current_streak ?? 0}</span>
                     </div>
+
+                    <div className="h-4 w-px bg-surface-300 mx-1" />
+
+                    <button
+                        onClick={() => signOut({ callbackUrl: "/login" })}
+                        className="p-1.5 hover:bg-surface-200 rounded-lg text-muted-foreground hover:text-accent-red transition-colors"
+                        title="Sign Out"
+                    >
+                        <LogOut className="w-4 h-4" />
+                    </button>
                 </div>
             </div>
+
 
             {/* Mobile Nav */}
             <nav className="md:hidden flex items-center justify-around border-t border-surface-300 py-2">
@@ -85,6 +97,6 @@ export function Navigation() {
                     );
                 })}
             </nav>
-        </header>
+        </header >
     );
 }
