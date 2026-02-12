@@ -90,3 +90,35 @@ export const SHOP_ITEMS = [
         icon: "⌨️",
     },
 ] as const;
+
+// ===== Loot Drops =====
+
+export const LOOT_ITEMS = [
+    {
+        id: "potion_xp_small",
+        name: "Potion of Clarity",
+        description: "+50 XP Instantly",
+        rarity: "common",
+        dropRate: 0.6,
+        icon: "🧪",
+        value: 50, // XP
+    },
+    {
+        id: "coin_purse",
+        name: "Lost Coin Purse",
+        description: "+50 Coins",
+        rarity: "rare",
+        dropRate: 0.3,
+        icon: "💰",
+        value: 50, // Coins
+    },
+    {
+        id: "theme_fragment",
+        name: "Cyberpunk Chip",
+        description: "Collect 3 to unlock Cyberpunk Theme",
+        rarity: "epic",
+        dropRate: 0.1,
+        icon: "💾",
+        value: 1,
+    },
+] as const;

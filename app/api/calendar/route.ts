@@ -57,13 +57,16 @@ export async function GET() {
     }
 
     try {
-        const now = new Date().toISOString();
+        const now = new Date();
+        const minDate = new Date();
+        minDate.setMonth(minDate.getMonth() - 1); // 1 month ago
+
         const maxDate = new Date();
         maxDate.setMonth(maxDate.getMonth() + 3);
 
         // Fetch primary calendar events
         const url = new URL(`${CALENDAR_API_BASE}/calendars/primary/events`);
-        url.searchParams.set("timeMin", now);
+        url.searchParams.set("timeMin", minDate.toISOString());
         url.searchParams.set("timeMax", maxDate.toISOString());
         url.searchParams.set("singleEvents", "true");
         url.searchParams.set("orderBy", "startTime");
@@ -89,7 +92,7 @@ export async function GET() {
             const holidayUrl = new URL(
                 `${CALENDAR_API_BASE}/calendars/en.singapore%23holiday%40group.v.calendar.google.com/events`
             );
-            holidayUrl.searchParams.set("timeMin", now);
+            holidayUrl.searchParams.set("timeMin", minDate.toISOString());
             holidayUrl.searchParams.set("timeMax", maxDate.toISOString());
             holidayUrl.searchParams.set("singleEvents", "true");
             holidayUrl.searchParams.set("orderBy", "startTime");

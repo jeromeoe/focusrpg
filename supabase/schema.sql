@@ -80,6 +80,17 @@ CREATE TABLE IF NOT EXISTS habit_entries (
   UNIQUE(user_id, habit_id, date)
 );
 
+-- ===== HABIT STREAKS (Persistent Stats) =====
+CREATE TABLE IF NOT EXISTS habit_streaks (
+  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  habit_id TEXT NOT NULL,
+  current_streak INTEGER NOT NULL DEFAULT 0,
+  longest_streak INTEGER NOT NULL DEFAULT 0,
+  last_completed_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (user_id, habit_id)
+);
+
 -- ===== INDEXES =====
 CREATE INDEX IF NOT EXISTS idx_quests_user ON quests(user_id);
 CREATE INDEX IF NOT EXISTS idx_quests_status ON quests(user_id, status);
@@ -97,6 +108,7 @@ ALTER TABLE quests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE focus_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE inventory ENABLE ROW LEVEL SECURITY;
 ALTER TABLE habit_entries ENABLE ROW LEVEL SECURITY;
+ALTER TABLE habit_streaks ENABLE ROW LEVEL SECURITY;
 
 -- Drop old policies if they exist
 DROP POLICY IF EXISTS "Users can view own profile" ON profiles;
@@ -117,3 +129,4 @@ CREATE POLICY "Allow all quests" ON quests FOR ALL USING (true) WITH CHECK (true
 CREATE POLICY "Allow all sessions" ON focus_sessions FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all inventory" ON inventory FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all habits" ON habit_entries FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all habit streaks" ON habit_streaks FOR ALL USING (true) WITH CHECK (true);

@@ -10,6 +10,7 @@ export interface Profile {
     current_streak: number;
     longest_streak: number;
     total_focus_minutes: number;
+    class_name?: string;
     created_at: string;
 }
 

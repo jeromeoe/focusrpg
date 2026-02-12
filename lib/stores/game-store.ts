@@ -8,6 +8,7 @@ import type { Profile, TimerStatus, FocusSession, Quest, Streak } from "@/lib/ty
 interface TimerStore {
     status: TimerStatus;
     totalSeconds: number;
+    startTime: number | null;
     remainingSeconds: number;
     sessionLabel: string;
     sessionCategory: string;
@@ -19,7 +20,8 @@ interface TimerStore {
     pauseTimer: () => void;
     resumeTimer: () => void;
     completeTimer: () => void;
-    cancelTimer: () => void;
+    cancelTimer: () => void; // Reset without penalty (for short sessions < 2m)
+    fizzleTimer: () => number; // Reset WITH penalty (returns coins lost)
     resetTimer: () => void;
     startBacklogEntry: (minutes: number, label: string, category?: string) => void;
 }
@@ -28,6 +30,7 @@ export const useTimerStore = create<TimerStore>((set, get) => ({
     status: "idle",
     totalSeconds: 0,
     remainingSeconds: 0,
+    startTime: null,
     sessionLabel: "",
     sessionCategory: "",
     isBacklog: false,
@@ -37,6 +40,7 @@ export const useTimerStore = create<TimerStore>((set, get) => ({
             status: "running",
             totalSeconds: minutes * 60,
             remainingSeconds: minutes * 60,
+            startTime: Date.now(),
             sessionLabel: label || "Focus Session",
             sessionCategory: category || "",
             isBacklog: false,
@@ -62,16 +66,42 @@ export const useTimerStore = create<TimerStore>((set, get) => ({
             status: "idle",
             totalSeconds: 0,
             remainingSeconds: 0,
+            startTime: null,
             sessionLabel: "",
             sessionCategory: "",
             isBacklog: false,
         }),
+
+    fizzleTimer: () => {
+        const { totalSeconds, remainingSeconds } = get();
+        const elapsedMinutes = (totalSeconds - remainingSeconds) / 60;
+
+        // Penalty: 50% of potential coins for the time spent
+        // Standard rate: 2 coins per session (approx). 
+        // Let's make it proportional: 0.5 coins penalty per minute spent.
+        // E.g. 10 mins spent = 5 coins lost.
+        // Cap at 20 coins max penalty.
+        const penalty = Math.min(20, Math.floor(elapsedMinutes * 0.5));
+
+        set({
+            status: "idle",
+            totalSeconds: 0,
+            remainingSeconds: 0,
+            startTime: null,
+            sessionLabel: "",
+            sessionCategory: "",
+            isBacklog: false,
+        });
+
+        return penalty;
+    },
 
     resetTimer: () =>
         set({
             status: "idle",
             totalSeconds: 0,
             remainingSeconds: 0,
+            startTime: null,
             sessionLabel: "",
             sessionCategory: "",
             isBacklog: false,
@@ -82,6 +112,7 @@ export const useTimerStore = create<TimerStore>((set, get) => ({
             status: "completed",
             totalSeconds: minutes * 60,
             remainingSeconds: 0,
+            startTime: Date.now(),
             sessionLabel: label,
             sessionCategory: category || "",
             isBacklog: true,
@@ -103,6 +134,7 @@ interface PlayerStore {
     setSessions: (sessions: FocusSession[]) => void;
     setStreaks: (streaks: Streak[]) => void;
     addCoins: (amount: number) => void;
+    removeCoins: (amount: number) => void; // For Fizzle
     addXp: (amount: number) => void;
     setLoading: (loading: boolean) => void;
     toggleHabit: (habitId: string) => void;
@@ -124,6 +156,13 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         const { profile } = get();
         if (profile) {
             set({ profile: { ...profile, coins: profile.coins + amount } });
+        }
+    },
+
+    removeCoins: (amount) => {
+        const { profile } = get();
+        if (profile) {
+            set({ profile: { ...profile, coins: Math.max(0, profile.coins - amount) } });
         }
     },
 
